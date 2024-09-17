@@ -1,8 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import * as hbs from 'hbs';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(3000);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.setViewEngine(hbs);
+  await app.listen(3003);
 }
 bootstrap();
