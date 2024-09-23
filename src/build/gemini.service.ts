@@ -6,6 +6,7 @@ import {
 } from '@google/generative-ai';
 import * as process from 'node:process';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
+import { JsonHandlerService } from './json-handler.service';
 
 @Injectable()
 export class GeminiService {
@@ -13,6 +14,7 @@ export class GeminiService {
   private genAI = new GoogleGenerativeAI(this.apiKey);
   private fileManager = new GoogleAIFileManager(this.apiKey);
 
+  constructor(private readonly jsonHandlerService: JsonHandlerService) {}
   private async uploadToGemini(path, mimeType) {
     const uploadResult = await this.fileManager.uploadFile(path, {
       mimeType,
@@ -39,6 +41,9 @@ export class GeminiService {
   }
 
   async requestBuild(request: string, balance: 'Low' | 'Mid' | 'High') {
+    // this.jsonHandlerService.getKillers().subscribe((data) => {
+    //   console.log(data);
+    // });
     const safetySettings = [
       {
         category: HarmCategory.HARM_CATEGORY_HARASSMENT,

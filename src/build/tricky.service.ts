@@ -38,6 +38,14 @@ export class TrickyService {
     return this.handleRequest(url);
   }
 
+  getItem(item: string, includeAddons?: boolean): Observable<any> {
+    const params = [];
+    if (item) params.push(`item=${item}`);
+    if (includeAddons) params.push(`&includeaddons`);
+    const url = `/iteminfo${params.length ? '?' + params.join('&') : ''}`;
+    return this.handleRequest(url);
+  }
+
   getPerks(role?: string): Observable<any> {
     const url = `/perks${role ? `?role=${role}` : ''}`;
     return this.handleRequest(url);
