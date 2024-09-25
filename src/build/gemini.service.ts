@@ -7,6 +7,7 @@ import {
 import * as process from 'node:process';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { JsonHandlerService } from './json-handler.service';
+import path from 'path';
 
 @Injectable()
 export class GeminiService {
@@ -41,9 +42,7 @@ export class GeminiService {
   }
 
   async requestBuild(request: string, balance: 'Low' | 'Mid' | 'High') {
-    // this.jsonHandlerService.getKillers().subscribe((data) => {
-    //   console.log(data);
-    // });
+    await this.jsonHandlerService.checkFiles();
     const safetySettings = [
       {
         category: HarmCategory.HARM_CATEGORY_HARASSMENT,

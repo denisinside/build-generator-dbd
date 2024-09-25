@@ -1,81 +1,154 @@
 import { Injectable } from '@nestjs/common';
 import { TrickyService } from './tricky.service';
 import { map } from 'rxjs/operators';
-import { forkJoin, Observable } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import * as fs from 'fs';
+import * as process from 'node:process';
 
 @Injectable()
 export class JsonHandlerService {
+  private readonly fileNames = [
+    'survivors.json',
+    'killers.json',
+    'items_and_addons.json',
+    'survivor_perks.json',
+  ];
+
   constructor(private readonly trickyService: TrickyService) {}
 
-  getSurvivors(): Observable<any> {
-    return this.trickyService
-      .getCharacters('survivor')
-      .pipe(map((survivors) => this.processSurvivors(survivors)));
+  async checkFiles(): Promise<void> {
+    let reUpload = false;
+    for (let i = 0; i < this.fileNames.length; i++) {
+      const filePath = `${process.cwd()}\\game-data\\${this.fileNames[i]}`;
+      fs.stat(filePath, (err, stats) => {
+        if (!reUpload && (err != null || !this.isFileRecent(stats.mtime))) {
+          reUpload = true;
+          this.getSurvivors();
+          this.getKillers();
+          this.getItems();
+          this.getSurvivorPerks();
+        }
+      });
+    }
   }
-  // getKillers(): Observable<any> {
-  //   return this.trickyService
-  //     .getCharacters('killer')
-  //     .pipe(map((killers) => this.processKillers(killers)));
-  // }
-  getItems(): Observable<any> {
-    return forkJoin({
+
+  private isFileRecent(mtime: Date): boolean {
+    const now = new Date();
+    const yesterday = new Date(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - 1,
+      16,
+      30,
+    );
+
+    if (
+      now.getUTCHours() < 16 ||
+      (now.getUTCHours() === 16 && now.getUTCMinutes() < 30)
+    ) {
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    }
+
+    return mtime.getTime() > yesterday.getTime();
+  }
+
+  getSurvivors(): void {
+    this.trickyService
+      .getCharacters('survivor')
+      .pipe(
+        map((survivors) => this.processSurvivors(survivors)),
+        map((result) => this.writeToFile('survivors.json', result)),
+      )
+      .subscribe();
+  }
+
+  getKillers(): void {
+    forkJoin({
+      killers: this.trickyService.getCharacters('killer'),
+      powers: this.trickyService.getItems(null, 'power'),
+    })
+      .pipe(
+        map(({ killers, powers }) => this.processKillers(killers, powers)),
+        map((result) => this.writeToFile('killers.json', result)),
+      )
+      .subscribe();
+  }
+
+  getItems(): void {
+    forkJoin({
       items: this.trickyService.getItems('survivor'),
       addons: this.trickyService.getAddons('survivor'),
-    }).pipe(
-      map(({ items, addons }) => this.processItemsAndAddons(items, addons)),
-    );
+    })
+      .pipe(
+        map(({ items, addons }) => this.processItemsAndAddons(items, addons)),
+        map((result) => this.writeToFile('items_and_addons.json', result)),
+      )
+      .subscribe();
+  }
+
+  getSurvivorPerks(): void {
+    this.trickyService
+      .getPerks('survivor')
+      .pipe(
+        map((perks) => this.processPerks(perks)),
+        map((result) => this.writeToFile('survivor_perks.json', result)),
+      )
+      .subscribe();
+  }
+
+  getKillerPerks(): void {
+    this.trickyService
+      .getPerks('killer')
+      .pipe(
+        map((perks) => this.processPerks(perks)),
+        map((result) => this.writeToFile('killer_perks.json', result)),
+      )
+      .subscribe();
   }
 
   private processSurvivors(survivors: any[]): any[] {
     return survivors.map((survivor) => {
-      const { id, name, gender, height, bio, story, image } = survivor;
+      const { id, name, gender, height, story, image } = survivor;
 
       return {
         id,
         name,
         gender,
         height,
-        bio: this.cleanText(bio),
         story: this.cleanText(story),
         image: this.extractFileName(image),
       };
     });
   }
 
-  // private processKillers(killers: any): any {
-  //   const result = {};
-  //   Object.values(killers).forEach((killer: any) => {
-  //     const { id, name, gender, height, bio, story, image, item } = killer;
-  //     killers.find
-  //     if (item != null) {
-  //       return this.trickyService.getItem(item).pipe(
-  //         map((power) => {
-  //           const { description } = power;
-  //           return {
-  //             id,
-  //             name,
-  //             gender,
-  //             height,
-  //             bio: this.cleanText(bio),
-  //             story: this.cleanText(story),
-  //             power_description: this.cleanText(description),
-  //             image: this.extractFileName(image),
-  //           };
-  //         }),
-  //       );
-  //     }
-  //
-  //     return {
-  //       id,
-  //       name,
-  //       gender,
-  //       height,
-  //       bio: this.cleanText(bio),
-  //       story: this.cleanText(story),
-  //       image: this.extractFileName(image),
-  //     };
-  //   });
-  // }
+  private processKillers(killers: any, powers: any): any {
+    return Object.values(killers).map((killer: any) => {
+      const { id, name, gender, height, image, item } = killer;
+      if (item != null) {
+        const { description } = Object.getOwnPropertyDescriptor(
+          powers,
+          item,
+        ).value;
+        return {
+          id,
+          name,
+          gender,
+          height,
+          power_description: this.cleanText(description),
+          image: this.extractFileName(image),
+        };
+      }
+
+      return of({
+        id,
+        name,
+        gender,
+        height,
+        power_description: null,
+        image: this.extractFileName(image),
+      });
+    });
+  }
 
   private processItemsAndAddons(items: any, addons: any): any {
     const processedItems = this.processItems(items);
@@ -149,6 +222,28 @@ export class JsonHandlerService {
     return result;
   }
 
+  private processPerks(perks: any): any {
+    return Object.values(perks).map((perk: any) => {
+      const { categories, name, description, tunables, image } = perk;
+      return {
+        name,
+        description: this.pasteTunablesToDescription(
+          this.cleanText(description),
+          Object.values(tunables),
+        ),
+        categories,
+        image: this.extractFileName(image),
+      };
+    });
+  }
+
+  private writeToFile(filename: string, data: any): void {
+    const filePath = `${process.cwd()}\\game-data\\${filename}`;
+
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    console.log(`Data successfully written to ${filePath}`);
+  }
+
   private cleanText(text: string): string {
     if (!text) return '';
     const textWithoutTags = text.replace(/<[^>]*>/g, '');
@@ -157,5 +252,19 @@ export class JsonHandlerService {
 
   private extractFileName(filePath: string): string {
     return filePath ? filePath.split('/').pop() : '';
+  }
+
+  private pasteTunablesToDescription(
+    description: string,
+    tunables: string[][],
+  ): string {
+    tunables.forEach((tunable, index = 0) => {
+      description = description.replace(
+        `{${index}}`,
+        tunable[tunable.length - 1],
+      );
+      index++;
+    });
+    return description;
   }
 }
