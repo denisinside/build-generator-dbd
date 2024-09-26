@@ -12,6 +12,7 @@ export class JsonHandlerService {
     'killers.json',
     'items_and_addons.json',
     'survivor_perks.json',
+    'icon_names.txt',
   ];
 
   constructor(private readonly trickyService: TrickyService) {}
@@ -20,13 +21,17 @@ export class JsonHandlerService {
     let reUpload = false;
     for (let i = 0; i < this.fileNames.length; i++) {
       const filePath = `${process.cwd()}\\game-data\\${this.fileNames[i]}`;
-      fs.stat(filePath, (err, stats) => {
+      fs.stat(filePath, async (err, stats) => {
         if (!reUpload && (err != null || !this.isFileRecent(stats.mtime))) {
           reUpload = true;
-          this.getSurvivors();
-          this.getKillers();
-          this.getItems();
-          this.getSurvivorPerks();
+          await this.getSurvivors();
+          await this.getKillers();
+          await this.getItems();
+          await this.getSurvivorPerks();
+          this.writeToFile(
+            'icon_names.txt',
+            process.env.ICON_NAMES.split('\n'),
+          );
         }
       });
     }
@@ -52,7 +57,7 @@ export class JsonHandlerService {
     return mtime.getTime() > yesterday.getTime();
   }
 
-  getSurvivors(): void {
+  private async getSurvivors(): Promise<void> {
     this.trickyService
       .getCharacters('survivor')
       .pipe(
@@ -62,7 +67,7 @@ export class JsonHandlerService {
       .subscribe();
   }
 
-  getKillers(): void {
+  private async getKillers(): Promise<void> {
     forkJoin({
       killers: this.trickyService.getCharacters('killer'),
       powers: this.trickyService.getItems(null, 'power'),
@@ -74,7 +79,7 @@ export class JsonHandlerService {
       .subscribe();
   }
 
-  getItems(): void {
+  private async getItems(): Promise<void> {
     forkJoin({
       items: this.trickyService.getItems('survivor'),
       addons: this.trickyService.getAddons('survivor'),
@@ -86,7 +91,7 @@ export class JsonHandlerService {
       .subscribe();
   }
 
-  getSurvivorPerks(): void {
+  private async getSurvivorPerks(): Promise<void> {
     this.trickyService
       .getPerks('survivor')
       .pipe(
@@ -96,7 +101,7 @@ export class JsonHandlerService {
       .subscribe();
   }
 
-  getKillerPerks(): void {
+  private async getKillerPerks(): Promise<void> {
     this.trickyService
       .getPerks('killer')
       .pipe(
